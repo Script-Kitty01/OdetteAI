@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fluxguard-ai"
+version = "0.1.0"
+description = "Skeleton for the FluxGuard AI industrial monitoring pipeline"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.115",
+    "numpy>=1.26",
+    "pandas>=2.2",
+    "PyWavelets>=1.6",
+    "scikit-learn>=1.5",
+    "scipy>=1.13",
+    "torch>=2.4",
+    "uvicorn[standard]>=0.30",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.6",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100

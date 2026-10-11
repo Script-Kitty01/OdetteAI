@@ -1,0 +1,1 @@
+"""Future supervised fault classifier."""
