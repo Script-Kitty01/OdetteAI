@@ -1,0 +1,24 @@
+{
+  "name": "cwru-anomaly-baseline",
+  "kind": "cwru-anomaly",
+  "seed": 42,
+  "raw_dir": "data/raw/cwru",
+  "output_root": "models/runs",
+  "train_fraction": 0.7,
+  "validation_fraction": 0.15,
+  "signal": {
+    "sampling_rate_hz": 12000.0,
+    "highpass_cutoff_hz": 10.0,
+    "highpass_order": 4,
+    "window_size": 2048,
+    "overlap": 0.5
+  },
+  "model": {
+    "max_windows_per_recording": 12
+  },
+  "training": {
+    "epochs": 5,
+    "batch_size": 32,
+    "learning_rate": 0.001
+  }
+}

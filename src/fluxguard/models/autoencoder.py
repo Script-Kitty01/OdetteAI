@@ -30,7 +30,7 @@ class CWRUAutoencoder(nn.Module):
     def forward(self, values: torch.Tensor) -> torch.Tensor:
         if values.ndim == 2:
             values = values.unsqueeze(1)
-        if values.ndim != 3 or values.shape[1] != 1:
+        if not torch.jit.is_tracing() and (values.ndim != 3 or values.shape[1] != 1):
             raise ValueError("autoencoder input must have shape (batch, 1, length) or (batch, length)")
         reconstructed = self.decoder(self.encoder(values))
         return reconstructed[..., : values.shape[-1]]

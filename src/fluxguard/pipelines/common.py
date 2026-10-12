@@ -95,25 +95,60 @@ def export_onnx(
     input_name: str = "input",
     output_name: str = "output",
 ) -> dict[str, Any]:
-    """Export with a dynamic batch axis and fail loudly on export errors."""
+    """Export with the ``torch.export``-based ONNX exporter and a dynamic batch axis.
+
+    Falls back to the legacy TorchScript exporter when the dynamo path cannot
+    trace a model, so artifact export never silently disappears from a run.
+    """
 
     model.eval()
-    torch.onnx.export(
-        model,
-        example_input,
-        str(path),
-        input_names=[input_name],
-        output_names=[output_name],
-        dynamic_axes={input_name: {0: "batch"}, output_name: {0: "batch"}},
-        opset_version=17,
-        dynamo=False,
-    )
+    exporter = "dynamo"
+    try:
+        torch.onnx.export(
+            model,
+            (example_input,),
+            str(path),
+            input_names=[input_name],
+            output_names=[output_name],
+            dynamic_shapes=[{0: "batch"}],
+            dynamo=True,
+        )
+    except (UnicodeEncodeError, ValueError, RuntimeError):
+        # The dynamo exporter logs emoji and can crash on Windows consoles
+        # using legacy code pages; retry once with a UTF-8 stdout before
+        # falling back to the legacy TorchScript exporter.
+        import sys
+
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        try:
+            torch.onnx.export(
+                model,
+                (example_input,),
+                str(path),
+                input_names=[input_name],
+                output_names=[output_name],
+                dynamic_shapes=[{0: "batch"}],
+                dynamo=True,
+            )
+        except Exception:  # noqa: BLE001 - legacy fallback is the final safety net
+            exporter = "torchscript-legacy"
+            torch.onnx.export(
+                model,
+                (example_input,),
+                str(path),
+                input_names=[input_name],
+                output_names=[output_name],
+                dynamic_axes={input_name: {0: "batch"}, output_name: {0: "batch"}},
+                opset_version=17,
+                dynamo=False,
+            )
     validate_onnx(path)
     return {
         "path": str(path.name),
         "input_names": [input_name],
         "output_names": [output_name],
-        "opset": 17,
+        "exporter": exporter,
         "dynamic_axes": {input_name: {"0": "batch"}, output_name: {"0": "batch"}},
         "input_shape": list(example_input.shape),
     }

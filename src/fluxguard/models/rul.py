@@ -16,7 +16,7 @@ class CMapssRULRegressor(nn.Module):
         self.head = nn.Sequential(nn.Linear(hidden_size, hidden_size // 2 or 1), nn.ReLU(), nn.Linear(hidden_size // 2 or 1, 1))
 
     def forward(self, values: torch.Tensor) -> torch.Tensor:
-        if values.ndim != 3 or values.shape[-1] != self.sensor_count:
+        if not torch.jit.is_tracing() and (values.ndim != 3 or values.shape[-1] != self.sensor_count):
             raise ValueError("RUL input must have shape (batch, sequence, sensor_count)")
         output, _ = self.lstm(values)
         return self.head(output[:, -1]).squeeze(-1)

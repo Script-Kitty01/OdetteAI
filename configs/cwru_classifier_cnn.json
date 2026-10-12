@@ -1,0 +1,21 @@
+{
+  "name": "cwru-classifier-cnn",
+  "kind": "cwru-classifier",
+  "seed": 42,
+  "raw_dir": "data/raw/cwru",
+  "output_root": "models/runs",
+  "model": {
+    "representation": "raw",
+    "architecture": "cnn",
+    "max_windows_per_recording": 12
+  },
+  "signal": {
+    "window_size": 2048,
+    "overlap": 0.5
+  },
+  "training": {
+    "epochs": 5,
+    "batch_size": 32,
+    "learning_rate": 0.001
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "cmapss-rul-fd001",
+  "kind": "cmapss-rul",
+  "seed": 42,
+  "raw_dir": "data/raw/nasa-cmapss/extracted",
+  "output_root": "models/runs",
+  "cmapss": {
+    "subset": "FD001",
+    "variance_threshold": 1e-12,
+    "sequence_length": 30,
+    "sequence_stride": 1,
+    "rul_cap": 125
+  },
+  "training": {
+    "epochs": 5,
+    "batch_size": 64,
+    "learning_rate": 0.001
+  }
+}

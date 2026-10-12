@@ -1,14 +1,14 @@
 """Minimal inference API for the trained FluxGuard baseline models."""
 
+import os
+from pathlib import Path
 from typing import Any
 
 import numpy as np
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from fluxguard.models.autoencoder import CWRUAutoencoder
-from fluxguard.models.classifier import CWRUClassifier
-from fluxguard.models.rul import CMapssRULRegressor
+from fluxguard.api.service import FluxGuardService
 from fluxguard.pipelines.train_anomaly import score_autoencoder
 from fluxguard.pipelines.train_classifier import predict_classifier
 from fluxguard.pipelines.train_rul import predict_rul
@@ -22,25 +22,25 @@ class SequenceRequest(BaseModel):
     values: list[list[float]] = Field(min_length=1)
 
 
-class FluxGuardService:
-    """Model registry used by the API and straightforward to replace in deployment."""
-
-    def __init__(
-        self,
-        anomaly_model: CWRUAutoencoder | None = None,
-        anomaly_threshold: float | None = None,
-        classifier: CWRUClassifier | None = None,
-        class_names: tuple[str, ...] = (),
-        rul_model: CMapssRULRegressor | None = None,
-    ) -> None:
-        self.anomaly_model = anomaly_model
-        self.anomaly_threshold = anomaly_threshold
-        self.classifier = classifier
-        self.class_names = class_names
-        self.rul_model = rul_model
+__all__ = ["FluxGuardService", "app", "create_app"]  # FluxGuardService re-exported from fluxguard.api.service
 
 
-def create_app(service: FluxGuardService | None = None) -> FastAPI:
+def create_app(
+    service: FluxGuardService | None = None, models_root: str | Path | None = None
+) -> FastAPI:
+    """Build the API app, optionally loading completed runs below *models_root*.
+
+    When neither *service* nor *models_root* is given, the
+    ``FLUXGUARD_MODELS_ROOT`` environment variable is consulted; if that is
+    also unset the app starts with an empty registry and reports 503s.
+    """
+
+    if service is None:
+        root = models_root or os.environ.get("FLUXGUARD_MODELS_ROOT")
+        if root is not None:
+            from fluxguard.api.registry import load_service_from_runs
+
+            service = load_service_from_runs(Path(root))
     registry = service or FluxGuardService()
     app = FastAPI(title="FluxGuard AI", version="0.1.0")
 

@@ -6,10 +6,32 @@ degradation dataset.
 
 ## Current status
 
-The repository contains a runnable local ML baseline. Dataset ingestion,
+The repository contains a runnable local ML pipeline. Dataset ingestion,
 preprocessing, signal features, CPU training helpers, evaluation metrics, and
-inference API routes are implemented; production deployment and advanced
-architectures remain future work.
+inference API routes are implemented, with end-to-end experiment orchestration
+across six configs: CWRU anomaly detection, four CWRU classifier variants
+(1D CNN, SE-TCN, STFT, CWT), and C-MAPSS RUL regression. Each run records a
+non-deep baseline first (quality gate), persists a full artifact bundle, and
+exports ONNX.
+
+## Run experiments
+
+```powershell
+python -m pip install -e ".[dev]"
+$env:PYTHONPATH = "src"
+python -m fluxguard.pipelines.run_experiment run --config configs/cwru_anomaly.json
+python -m fluxguard.pipelines.run_experiment run --config configs/cwru_classifier_cnn.json
+python -m fluxguard.pipelines.run_experiment run --config configs/cwru_classifier_setcn.json
+python -m fluxguard.pipelines.run_experiment run --config configs/cwru_classifier_stft.json
+python -m fluxguard.pipelines.run_experiment run --config configs/cwru_classifier_cwt.json
+python -m fluxguard.pipelines.run_experiment run --config configs/cmapss_rul_fd001.json
+python -m fluxguard.pipelines.run_experiment summarize
+```
+
+Per-run artifacts land in `models/runs/<experiment>/<timestamp>/` (checkpoint,
+`config.json`, preprocessing, split manifest with leakage fingerprint,
+`metrics.json` with baselines, ONNX export, figures, `report.md`); the
+aggregate table and chart go to `reports/experiment-summary.md/.png`.
 
 ## Project layout
 
@@ -32,11 +54,22 @@ architectures remain future work.
 python -m pip install -e ".[dev]"
 ```
 
-Run the API locally with:
+Run the API locally with trained runs loaded:
 
 ```powershell
 $env:PYTHONPATH = "src"
+$env:FLUXGUARD_MODELS_ROOT = "models/runs"
 python -m uvicorn fluxguard.api.app:app --reload
+```
+
+`GET /health` reports which models loaded; without `FLUXGUARD_MODELS_ROOT`
+(or with an empty runs directory) the inference routes return 503. A
+`Dockerfile` is provided for deployment: mount trained runs at
+`/models/runs`.
+
+```powershell
+docker build -t fluxguard .
+docker run -p 8000:8000 -v ${PWD}/models/runs:/models/runs fluxguard
 ```
 
 ## Planned dependencies
@@ -70,8 +103,7 @@ $env:PYTHONPATH = "src"
 python -m pytest -q
 ```
 
-The current baseline includes STFT extraction, healthy-only autoencoder
-threshold calibration, recording-aware classifier/RUL training helpers, and
-artifact/ONNX export utilities. Full dataset-scale experiment orchestration,
-model artifact loading, and advanced SE-TCN/CWT comparisons remain follow-up
-work.
+The current baseline includes STFT/CWT extraction, healthy-only autoencoder
+threshold calibration with sensitivity analysis, recording-aware classifier/RUL
+training helpers, artifact/ONNX export utilities, SE-TCN and spectrogram model
+comparisons, and per-run evaluation reports with leakage evidence.

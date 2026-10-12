@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FluxGuard AI — Experiment Dashboard</title>
+<style>
+  :root { color-scheme: dark; --bg:#0b1220; --card:#131c2e; --line:#243250; --txt:#e8eef7; --mut:#93a1b8; --acc:#5aa2ff; --ok:#3ecf8e; --warn:#ffb020; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif; background:var(--bg); color:var(--txt); }
+  header { padding:32px 24px 8px; max-width:1100px; margin:0 auto; }
+  header p { color:var(--mut); margin:6px 0 0; }
+  .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); gap:16px; max-width:1100px; margin:20px auto; padding:0 24px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px; }
+  .card h3 { margin:0 0 4px; font-size:14px; color:var(--mut); text-transform:uppercase; letter-spacing:.06em; }
+  .big { font-size:34px; font-weight:700; margin:4px 0; }
+  .sub { color:var(--mut); font-size:13px; }
+  .ok { color:var(--ok); } .warn { color:var(--warn); }
+  section { max-width:1100px; margin:8px auto 32px; padding:0 24px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); }
+  th { color:var(--mut); font-weight:600; }
+  .bar { height:8px; border-radius:4px; background:#22304a; overflow:hidden; min-width:120px; }
+  .bar > div { height:100%; background:var(--acc); border-radius:4px; }
+  img { width:100%; border-radius:12px; border:1px solid var(--line); background:#fff; }
+  footer { max-width:1100px; margin:0 auto 40px; padding:0 24px; color:var(--mut); font-size:13px; }
+  code { background:#1b2740; padding:2px 6px; border-radius:6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>FluxGuard AI — Experiment Dashboard</h1>
+  <p>Latest run per experiment &middot; generated from <code>models/runs</code> &middot; all leakage gates pass (recording/engine-level disjoint splits)</p>
+</header>
+
+<div class="grid">
+  <div class="card"><h3>Anomaly ROC-AUC</h3><div class="big">0.824</div><div class="sub">healthy-only autoencoder &middot; FPR 0.000, recall 0.777 &middot; RMS baseline recorded</div></div>
+  <div class="card"><h3>Best classifier accuracy</h3><div class="big">0.958</div><div class="sub">STFT &amp; CWT spectrogram CNNs &middot; majority baseline 0.958 (imbalanced test slice)</div></div>
+  <div class="card"><h3>RUL MAE</h3><div class="big">9.63</div><div class="sub">cycles, FD001 LSTM &middot; mean baseline 18.40 &middot; RMSE 14.08</div></div>
+  <div class="card"><h3>Leakage gates</h3><div class="big ok">6 / 6 pass</div><div class="sub">split fingerprints stored per run; threshold fit on healthy validation only</div></div>
+</div>
+
+<section>
+  <h2>Classifier comparison</h2>
+  <table>
+    <tr><th>Variant</th><th>Accuracy</th><th>Macro F1</th><th>Note</th></tr>
+    <tr><td>1D CNN (raw)</td><td><div class="bar"><div style="width:87.8%"></div></div> 0.878</td><td>0.468</td><td>misses all 12 healthy test windows</td></tr>
+    <tr><td>SE-TCN (raw)</td><td><div class="bar"><div style="width:75.7%"></div></div> 0.757</td><td>0.555</td><td>only variant that recalls the healthy class (1.000)</td></tr>
+    <tr><td>STFT spectrogram CNN</td><td><div class="bar"><div style="width:95.8%"></div></div> 0.958</td><td>0.489</td><td>tied best; time-frequency input wins</td></tr>
+    <tr><td>CWT spectrogram CNN</td><td><div class="bar"><div style="width:95.8%"></div></div> 0.958</td><td>0.489</td><td>tied best; time-frequency input wins</td></tr>
+  </table>
+  <p class="sub">Honest caveat: with only 4 healthy CWRU recordings, test slices are fault-heavy, so the majority-class baseline looks strong on accuracy. Macro F1 exposes the real gap — all variants must improve healthy-class recall.</p>
+</section>
+
+<section>
+  <h2>Aggregate comparison chart</h2>
+  <img src="experiment-summary.png" alt="Experiment comparison bar chart">
+</section>
+
+<section>
+  <h2>Run the project</h2>
+  <p><code>$env:PYTHONPATH="src"; python -m fluxguard.pipelines.run_experiment run --config configs/cwru_anomaly.json</code></p>
+  <p><code>$env:PYTHONPATH="src"; $env:FLUXGUARD_MODELS_ROOT="models/runs"; python -m uvicorn fluxguard.api.app:app</code> — then <code>GET /health</code>, <code>POST /api/anomaly/score</code>, <code>POST /api/fault/predict</code>, <code>POST /api/rul/predict</code>.</p>
+</section>
+
+<footer>FluxGuard AI &middot; CWRU bearing + NASA C-MAPSS benchmarks &middot; artifacts under <code>models/runs/&lt;experiment&gt;/&lt;timestamp&gt;/</code></footer>
+</body>
+</html>
