@@ -6,19 +6,20 @@ degradation dataset.
 
 ## Current status
 
-This repository currently contains the project skeleton only. Dataset
-ingestion, preprocessing, feature extraction, model training, evaluation,
-telemetry replay, and API routes are not implemented yet.
+The repository contains a runnable local ML baseline. Dataset ingestion,
+preprocessing, signal features, CPU training helpers, evaluation metrics, and
+inference API routes are implemented; production deployment and advanced
+architectures remain future work.
 
 ## Project layout
 
 - `src/fluxguard/datasets/` - future CWRU and NASA C-MAPSS adapters
 - `src/fluxguard/preprocessing/` - future windowing, scaling, and split logic
 - `src/fluxguard/features/` - future time, frequency, and time-frequency features
-- `src/fluxguard/models/` - future anomaly, classification, and RUL models
-- `src/fluxguard/pipelines/` - future training pipeline entry points
-- `src/fluxguard/evaluation/` - future metrics and reports
-- `src/fluxguard/api/` - future FastAPI application
+- `src/fluxguard/models/` - autoencoder, CWRU classifier, and RUL baseline models
+- `src/fluxguard/pipelines/` - deterministic CPU training and inference helpers
+- `src/fluxguard/evaluation/` - anomaly, classification, and regression metrics
+- `src/fluxguard/api/` - FastAPI health and model inference routes
 - `data/` - local raw, interim, and processed datasets
 - `models/` - generated model artifacts
 - `configs/` - future experiment configuration files
@@ -31,8 +32,12 @@ telemetry replay, and API routes are not implemented yet.
 python -m pip install -e ".[dev]"
 ```
 
-No runnable training or serving commands are available in this scaffold
-phase.
+Run the API locally with:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m uvicorn fluxguard.api.app:app --reload
+```
 
 ## Planned dependencies
 
@@ -40,6 +45,33 @@ The planned implementation will use PyTorch, NumPy, pandas, SciPy, PyWavelets,
 scikit-learn, FastAPI, and Uvicorn. Benchmark datasets must be acquired
 separately according to their respective terms and placed under `data/raw/`.
 
-## Plan
+## Plans
 
-See [plan.md](plan.md) for the scaffold-only implementation plan.
+- [Project scaffold plan](plan.md)
+- [Machine-learning plan](plans/machine-learning/plan.md)
+
+## Data foundation status
+
+The first ML implementation slice now provides dataset validation and
+preprocessing foundations:
+
+- CWRU MAT-file discovery and vibration-channel loading
+- CWRU detrending, DC-offset removal, high-pass filtering, and source-aware
+  windows
+- NASA C-MAPSS parsing, training RUL labels, and engine-local sequences
+- Training-only sensor variance selection
+- Deterministic group split manifests and training-only scaler metadata
+- CWRU time-domain statistical features and one-sided FFT features
+
+Run the focused tests with:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m pytest -q
+```
+
+The current baseline includes STFT extraction, healthy-only autoencoder
+threshold calibration, recording-aware classifier/RUL training helpers, and
+artifact/ONNX export utilities. Full dataset-scale experiment orchestration,
+model artifact loading, and advanced SE-TCN/CWT comparisons remain follow-up
+work.
