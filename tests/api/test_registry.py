@@ -72,7 +72,25 @@ def test_load_service_from_runs_builds_working_endpoints(tmp_path: Path) -> None
 
     fault = client.post("/api/fault/predict", json={"values": [0.0] * 32})
     assert fault.status_code == 200
-    assert fault.json()["class_name"] in ("healthy", "outer_race_0.007", "inner_race_0.014")
+    assert fault.json()["class_name"] in ("healthy", "outer_race_0.007", "inner_race_0.014", "UNKNOWN_FAULT")
+
+
+def test_load_service_selects_newest_run_and_retains_manifest(tmp_path: Path) -> None:
+    older = _write_anomaly_run(tmp_path, "20260101T000000Z")
+    newer = _write_anomaly_run(tmp_path, "20260102T000000Z")
+    older_config = json.loads((older / "config.json").read_text(encoding="utf-8"))
+    newer_config = json.loads((newer / "config.json").read_text(encoding="utf-8"))
+    older_config["threshold"]["mean_error"] = 0.9
+    newer_config["threshold"]["mean_error"] = 0.7
+    older.joinpath("config.json").write_text(json.dumps(older_config), encoding="utf-8")
+    newer.joinpath("config.json").write_text(json.dumps(newer_config), encoding="utf-8")
+
+    service = load_service_from_runs(tmp_path)
+    assert service.anomaly_threshold == 0.73
+    runs = service.manifest["anomaly-demo"]
+    assert [run["run_id"] for run in runs] == ["20260102T000000Z", "20260101T000000Z"]
+    assert runs[0]["selected"] is True
+    assert runs[1]["selected"] is False
 
 
 def test_create_app_with_models_root_env(tmp_path: Path, monkeypatch) -> None:

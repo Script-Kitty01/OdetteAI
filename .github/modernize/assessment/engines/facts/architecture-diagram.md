@@ -1,154 +1,180 @@
 # Architecture Diagram
 
-High-level architecture and component interaction model for FluxGuard AI, an industrial machine learning platform for predictive maintenance and condition monitoring.
+FluxGuard AI is a local-first predictive-maintenance platform. Offline
+training and visualization produce versioned model artifacts, while the
+FastAPI runtime applies sensor quality gates, model inference, and alert
+decisions to incoming telemetry.
 
 ## Application Architecture
 
 <!-- mermaid-checked: no \n, no em-dash/en-dash, no {} in labels, subgraphs are id["label"], arrows are -->|"label"|, all subgraphs closed by end, ids unique -->
 ```mermaid
 flowchart TD
-    subgraph IngestionLayer["Data Ingestion Layer"]
-        CwruRaw[("CWRU Raw MAT Store")]
-        CmapssRaw[("NASA C-MAPSS Raw Text Store")]
-        CwruLoader["CWRU Reader - Scipy IO"]
-        CmapssLoader["C-MAPSS Parser - Pandas"]
+    subgraph IngestionLayer["Data Ingestion"]
+        CwruRaw[("CWRU MAT Store")]
+        CmapssRaw[("NASA C-MAPSS Store")]
+        CwruReader["CWRU Reader"]
+        CmapssReader["C-MAPSS Reader"]
+    end
+    subgraph OfflineLayer["Offline Training and Analysis"]
+        Conditioning["Signal Conditioning"]
+        Windowing["Window and Sequence Builder"]
+        Splitting["Group Split Engine"]
+        Features["Feature Extractors"]
+        Experiment["Experiment Runner"]
+        Visuals["Visualization and Statistics"]
+    end
+    subgraph ModelLayer["Models and Artifacts"]
+        Models["Autoencoder and Classifiers"]
+        RulModel["RUL Regressor"]
+        Artifacts[("Model Run Store")]
+        Validator["Artifact Validator"]
+        Registry["Model Registry"]
+    end
+    subgraph RuntimeLayer["Runtime Reliability and Serving"]
+        Gateway["Industrial Gateway"]
+        Telemetry["Telemetry API"]
+        Quality["Sensor Quality Monitor"]
+        Api["FastAPI Service"]
+        OpenSet["Open Set Gate"]
+        Uncertainty["RUL Uncertainty"]
+        Alerts["Alert and Incident Engine"]
     end
 
-    subgraph PreprocessingLayer["Signal Conditioning and Split Engine"]
-        DetrendFilter["Detrend and Butterworth Highpass Filter"]
-        SlidingWindow["Window Generator - 2048 Samples"]
-        VarianceSelector["Sensor Variance Pruner"]
-        SequenceBuilder["Engine Sequence Generator"]
-        SplitEngine["Deterministic Group Split Engine"]
-    end
-
-    subgraph FeatureModelLayer["Representations and Model Zoo"]
-        Features["Time and Frequency and Wavelet Features"]
-        Autoencoder["CWRU 1D Conv Autoencoder"]
-        ClassifierNet["CWRU Fault Classifiers - 1D CNN / SE-TCN / Spectrogram"]
-        RulLSTM["NASA C-MAPSS Sequence LSTM"]
-        ModelRegistry[("Model Artifact and ONNX Registry")]
-    end
-
-    subgraph ServingLayer["Inference and Serving Layer"]
-        FastApiApp["FastAPI REST Application"]
-        RunLoader["Dynamic Model Run Loader"]
-        ClientGateway["Industrial Gateway / Edge Client"]
-    end
-
-    CwruRaw -->|"raw mat files"| CwruLoader
-    CmapssRaw -->|"whitespace text"| CmapssLoader
-    CwruLoader -->|"vibration arrays"| DetrendFilter
-    DetrendFilter -->|"filtered telemetry"| SlidingWindow
-    CmapssLoader -->|"engine sensor table"| VarianceSelector
-    VarianceSelector -->|"pruned sensor channels"| SequenceBuilder
-    SlidingWindow -->|"partitioned by record"| SplitEngine
-    SequenceBuilder -->|"partitioned by engine"| SplitEngine
-    SplitEngine -->|"healthy windows"| Autoencoder
-    SplitEngine -->|"labeled windows"| ClassifierNet
-    SplitEngine -->|"sequence tensors"| RulLSTM
-    SlidingWindow -.->|"feature transforms"| Features
-    Autoencoder -->|"calibrated threshold"| ModelRegistry
-    ClassifierNet -->|"checkpoint and onnx"| ModelRegistry
-    RulLSTM -->|"checkpoint and onnx"| ModelRegistry
-    ModelRegistry -->|"load active runs"| RunLoader
-    RunLoader -->|"injected models"| FastApiApp
-    ClientGateway -->|"HTTP POST telemetry"| FastApiApp
+    CwruRaw -->|"MAT files"| CwruReader
+    CmapssRaw -->|"sensor text"| CmapssReader
+    CwruReader -->|"vibration arrays"| Conditioning
+    Conditioning -->|"conditioned windows"| Windowing
+    CmapssReader -->|"sensor tables"| Windowing
+    Windowing -->|"grouped inputs"| Splitting
+    Splitting -->|"training data"| Experiment
+    Features -.->|"offline representations"| Experiment
+    Experiment -->|"trained models"| Models
+    Experiment -->|"trained RUL"| RulModel
+    Experiment -->|"reports and plots"| Visuals
+    Models -->|"model artifacts"| Artifacts
+    RulModel -->|"model artifacts"| Artifacts
+    Artifacts -->|"validate bundle"| Validator
+    Validator -->|"load compatible runs"| Registry
+    Gateway -->|"telemetry POST"| Telemetry
+    Telemetry -->|"quality gate"| Quality
+    Quality -->|"valid signal"| Api
+    Api -->|"model lookup"| Registry
+    Api -->|"classifier confidence"| OpenSet
+    Api -->|"RUL output"| Uncertainty
+    Api -->|"prediction state"| Alerts
+    Quality -->|"sensor fault"| Alerts
 ```
 
 ### Technology Stack Summary
 
 | Layer | Technology | Version | Purpose |
 |---|---|---|---|
-| Deep Learning Framework | PyTorch | >=2.4 | Neural network architectures (Autoencoder, SE-TCN, 2D CNN, LSTM) |
-| Signal Processing | SciPy (signal / io) | >=1.13 | Highpass Butterworth filtering, detrending, STFT, and MAT file ingestion |
-| Wavelet Transforms | PyWavelets | >=1.6 | Continuous Wavelet Transform (CWT) scalogram generation |
-| Data & Arrays | NumPy, pandas | >=1.26, >=2.2 | Ingestion, 26-column engine tables, matrix transformations |
-| Classical ML & Metrics | scikit-learn | >=1.5 | Standard scaling, non-deep baselines, classification/regression metrics |
-| Deployment & Hardware | ONNX, ONNX Runtime | >=1.16 | Dynamic-batch graph export and edge inference runtime |
-| API Serving | FastAPI, Uvicorn | >=0.115, >=0.30 | High-performance asynchronous REST endpoints |
-| Containerization | Docker | Python 3.12-slim | Lightweight portable production deployment container |
+| Deep learning | PyTorch | >=2.4 | Autoencoder, CNN, SE-TCN, spectrogram CNN, and LSTM |
+| Signal processing | SciPy | >=1.13 | MAT loading, detrending, filtering, FFT, and STFT |
+| Wavelets | PyWavelets | >=1.6 | CWT scalogram generation |
+| Data processing | NumPy and pandas | >=1.26 and >=2.2 | Dataset tables and tensor preparation |
+| Classical ML | scikit-learn | >=1.5 | Scaling, baselines, and evaluation metrics |
+| API serving | FastAPI and Uvicorn | >=0.115 and >=0.30 | Local inference and telemetry API |
+| Graph export | ONNX and ONNXScript | >=1.16 and >=0.1 | Model export and graph validation |
+| ONNX execution | ONNX Runtime | Optional | Numerical parity and edge latency checks |
+| Visualization | Matplotlib | >=3.9 | Offline plots and statistical reports |
 
-### Data Storage & External Services
+### Data Storage and External Services
 
-FluxGuard AI operates primarily on local industrial data volumes and versioned disk registries. Raw vibration recordings (160 MAT files from CWRU) and multi-channel engine degradation logs (NASA C-MAPSS FD001-FD004) reside in the file system under `data/raw/`. Training pipelines persist fully self-contained artifact packages under `models/runs/<experiment>/<run-id>/`, containing PyTorch weights (`model.pt`), deployment graphs (`model.onnx`), schema descriptors (`config.json`), preprocessing statistics (`preprocessing.json`), cryptographic split manifests (`split-manifest.json`), and benchmark metrics (`metrics.json`). No external cloud database or broker is required for runtime operation, keeping the pipeline secure and air-gapped for edge industrial environments.
+The platform uses local file storage for raw datasets, generated reports, and
+versioned model bundles under `models/runs/`. The artifact validator checks
+required files and JSON metadata before the registry loads a run. There is no
+database, message broker, cloud service, or external industrial protocol
+adapter in the current runtime. MQTT, OPC UA, and Modbus remain integration
+options for a future deployment boundary.
 
 ### Key Architectural Decisions
 
-- **Strict Recording- and Engine-Level Disjoint Splitting**: CWRU is partitioned by physical recording ID and C-MAPSS is partitioned by engine ID, eliminating data leakage from overlapping temporal windows.
-- **Unsupervised Zero-Shot Anomaly Calibration**: The 1D Convolutional Autoencoder is trained strictly on healthy baseline data, calibrating its threshold dynamically at `mu + 3 * sigma` on healthy validation errors.
-- **ONNX Export and Dynamic Batch Validation**: Every model run exports and validates a standardized ONNX graph with dynamic batch axes for AMD Quark quantization and edge execution.
+- CWRU splits are recording-aware and C-MAPSS splits are engine-aware to avoid
+  leakage from overlapping windows and related sequences.
+- Runtime telemetry passes through a sensor-quality gate before model scoring,
+  and sensor faults take precedence over machine-fault alerts.
+- The registry loads the newest complete compatible run while retaining all
+  discovered runs in its manifest for inspection and rollback planning.
+- RUL intervals and open-set rejection are baseline heuristics and are not
+  presented as calibrated uncertainty or formal OOD detection.
 
 ## Component Relationships
 
 <!-- mermaid-checked: no \n, no em-dash/en-dash, no {} in labels, subgraphs are id["label"], arrows are -->|"label"|, all subgraphs closed by end, ids unique -->
 ```mermaid
 flowchart LR
-    subgraph PresentationComponents["Presentation and API"]
-        cFastApi["FastAPI App Module"]
-        cRegistry["Run Discovery and Registry"]
-        cService["FluxGuard Service Container"]
+    subgraph PresentationComponents["Presentation"]
+        cApi["FastAPI Application"]
+        cTelemetry["Telemetry Endpoint"]
+        cCatalog["Model Catalog Endpoint"]
     end
-
-    subgraph PipelineComponents["Pipelines and Orchestration"]
-        cExperiment["Run Experiment Runner"]
-        cAnomalyPipe["Anomaly Train Pipeline"]
-        cClassPipe["Classifier Train Pipeline"]
-        cRulPipe["RUL Train Pipeline"]
-        cBaseline["Non-Deep Baselines Evaluator"]
+    subgraph DecisionComponents["Reliability and Decisions"]
+        cQuality["Sensor Quality Monitor"]
+        cOpenSet["Open Set Confidence Gate"]
+        cUncertainty["RUL Interval Estimator"]
+        cAlerts["Alert and Incident Engine"]
     end
-
-    subgraph ModelComponents["Core Model Implementations"]
-        cAutoencoder["CWRU Autoencoder"]
-        cClassifier["CWRU 1D CNN / SE-TCN"]
-        cSpectrogram["Spectrogram CNN"]
-        cRul["C-MAPSS LSTM Regressor"]
+    subgraph RegistryComponents["Artifact and Model Registry"]
+        cValidator["Artifact Validator"]
+        cRegistry["Run Registry"]
+        cService["FluxGuard Service"]
     end
-
-    subgraph PreprocComponents["Data and Preprocessing"]
-        cCwru["CWRU MAT Adapter"]
-        cCmapss["C-MAPSS Reader"]
-        cWindow["Windowing and Filter Module"]
-        cSplit["Group Split Manifest Engine"]
+    subgraph OfflineComponents["Offline Analysis"]
+        cExperiment["Experiment Runner"]
+        cVisuals["Visualization CLI"]
         cFeatures["Feature Extractors"]
     end
+    subgraph ModelComponents["Model Implementations"]
+        cAnomaly["Anomaly Autoencoder"]
+        cClassifier["Fault Classifiers"]
+        cRul["RUL Regressor"]
+    end
 
-    cFastApi -->|"queries models"| cService
-    cRegistry -->|"populates"| cService
-    cExperiment -->|"drives"| cAnomalyPipe
-    cExperiment -->|"drives"| cClassPipe
-    cExperiment -->|"drives"| cRulPipe
-    cExperiment -->|"validates with"| cBaseline
-    cAnomalyPipe -->|"instantiates"| cAutoencoder
-    cClassPipe -->|"instantiates"| cClassifier
-    cClassPipe -->|"instantiates"| cSpectrogram
-    cRulPipe -->|"instantiates"| cRul
-    cAnomalyPipe -->|"consumes"| cWindow
-    cClassPipe -->|"consumes"| cFeatures
-    cRulPipe -->|"consumes"| cCmapss
-    cCwru -->|"feeds signals"| cWindow
-    cWindow -->|"splits by record"| cSplit
-    cCmapss -->|"splits by engine"| cSplit
+    cTelemetry -->|"quality check"| cQuality
+    cQuality -->|"valid data"| cApi
+    cQuality -->|"invalid data"| cAlerts
+    cApi -->|"resolve models"| cService
+    cApi -->|"confidence check"| cOpenSet
+    cApi -->|"interval estimate"| cUncertainty
+    cApi -->|"evaluate state"| cAlerts
+    cCatalog -->|"read manifest"| cService
+    cValidator -->|"validate bundles"| cRegistry
+    cRegistry -->|"load models"| cService
+    cExperiment -->|"train"| cAnomaly
+    cExperiment -->|"train"| cClassifier
+    cExperiment -->|"train"| cRul
+    cExperiment -->|"extract features"| cFeatures
+    cVisuals -->|"analyze datasets"| cFeatures
 ```
 
 ### Component Inventory
 
 | Component | Layer | Type | Responsibility |
 |---|---|---|---|
-| `FastAPI App Module` | Presentation | REST API Controller | Exposes `/health`, `/api/anomaly/score`, `/api/fault/predict`, and `/api/rul/predict` endpoints |
-| `Run Discovery and Registry` | Presentation | Dynamic Factory | Scans `models/runs/`, verifies artifact bundles, and constructs live model runners |
-| `FluxGuard Service Container` | Presentation | Service Registry | Holds instantiated models, calibrated anomaly thresholds, and class names |
-| `Run Experiment Runner` | Pipeline | CLI Orchestrator | Automates end-to-end dataset loading, partitioning, baseline checking, training, evaluation, and ONNX export |
-| `Anomaly Train Pipeline` | Pipeline | Training Module | Trains autoencoder on healthy windows and computes statistical anomaly thresholds |
-| `Classifier Train Pipeline` | Pipeline | Training Module | Trains 1D CNN, SE-TCN, or Spectrogram CNN using class-weighted cross-entropy loss |
-| `RUL Train Pipeline` | Pipeline | Training Module | Trains LSTM sequence regressor to predict Remaining Useful Life cycles on C-MAPSS |
-| `Non-Deep Baselines Evaluator` | Pipeline | Validation Gate | Computes simple baselines (RMS energy, Majority Class, Linear Regression) before deep training |
-| `CWRU Autoencoder` | Model Zoo | PyTorch Module | 1D Convolutional Autoencoder mapping healthy vibrations to a bottleneck latent space |
-| `CWRU 1D CNN / SE-TCN` | Model Zoo | PyTorch Module | Dilated causal convs and Squeeze-and-Excitation attention for bearing fault classification |
-| `Spectrogram CNN` | Model Zoo | PyTorch Module | 2D Convolutional network processing STFT spectrograms or CWT scalograms |
-| `C-MAPSS LSTM Regressor` | Model Zoo | PyTorch Module | Recurrent LSTM network capturing multivariate degradation trajectories |
-| `CWRU MAT Adapter` | Data Layer | Data Ingestion | Discovers, parses, and validates CWRU MATLAB files, extracting calibrated vibration channels |
-| `C-MAPSS Reader` | Data Layer | Data Ingestion | Parses 26-column engine telemetry, enforces cycle monotonicity, and computes RUL ground truth |
-| `Windowing and Filter Module` | Preprocessing | Signal Conditioning | Performs linear detrending, zero-phase Butterworth filtering, and overlapping sliding windowing |
-| `Group Split Manifest Engine` | Preprocessing | Partition Gate | Generates deterministic, disjoint train/validation/test splits with SHA-256 integrity fingerprints |
-| `Feature Extractors` | Preprocessing | Feature Engineering | Extracts time-domain statistics (RMS, kurtosis), FFT spectra, STFT spectrograms, and CWT scalograms |
+| FastAPI Application | Presentation | REST application | Exposes liveness, readiness, inference, telemetry, alert, and model routes |
+| Telemetry Endpoint | Presentation | Ingestion route | Accepts vibration windows and sends them through quality and decision processing |
+| Model Catalog Endpoint | Presentation | Catalog route | Reports loaded capabilities and discovered run manifests |
+| Sensor Quality Monitor | Reliability | Quality gate | Detects invalid, flatline, stuck-at, and saturated telemetry |
+| Open Set Confidence Gate | Reliability | Decision gate | Converts low-confidence classifier results to `UNKNOWN_FAULT` |
+| RUL Interval Estimator | Reliability | Heuristic estimator | Adds lower and upper RUL bounds and a reliability flag |
+| Alert and Incident Engine | Reliability | State machine | Applies persistence, recovery, deduplication, and sensor-fault precedence |
+| Artifact Validator | Registry | Validation service | Checks required run files and readable metadata before loading |
+| Run Registry | Registry | Dynamic loader | Selects newest complete runs and retains discovered manifests |
+| FluxGuard Service | Registry | Runtime container | Holds models, thresholds, class names, and alert state |
+| Experiment Runner | Offline | CLI orchestrator | Trains, evaluates, exports, and reports model runs |
+| Visualization CLI | Offline | Analysis tool | Produces multi-domain plots, trajectories, and summary statistics |
+| Feature Extractors | Offline | Signal processing | Computes time, FFT, STFT, and CWT representations |
+| Anomaly Autoencoder | Models | Neural model | Detects deviations from healthy vibration patterns |
+| Fault Classifiers | Models | Neural models | Classifies known bearing fault categories |
+| RUL Regressor | Models | Sequence model | Estimates remaining useful life from C-MAPSS sequences |
+
+## Current Operational Boundaries
+
+- Incidents and prediction state are in process memory and are not durable.
+- The API has no authentication, authorization, rate limiting, or audit store.
+- ONNX Runtime is optional; parity is reported as `skipped` when unavailable.
+- RUL intervals use a heuristic margin and require later calibration.
+- Open-set behavior uses a confidence threshold and is not formal OOD detection.
+- External telemetry adapters and production observability are not included.

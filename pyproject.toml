@@ -31,6 +31,7 @@ dev = [
 
 [project.scripts]
 fluxguard-experiment = "fluxguard.pipelines.run_experiment:main"
+fluxguard-visualize = "fluxguard.evaluation.visualize:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

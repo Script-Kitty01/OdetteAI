@@ -1,5 +1,8 @@
 """Model registry shared by the inference API and the run loader."""
 
+from typing import Any
+
+from fluxguard.decision.alerts import AlertEngine
 from fluxguard.models.autoencoder import CWRUAutoencoder
 from fluxguard.models.classifier import CWRUClassifier
 from fluxguard.models.rul import CMapssRULRegressor
@@ -15,9 +18,13 @@ class FluxGuardService:
         classifier: CWRUClassifier | None = None,
         class_names: tuple[str, ...] = (),
         rul_model: CMapssRULRegressor | None = None,
+        min_confidence: float = 0.65,
     ) -> None:
         self.anomaly_model = anomaly_model
         self.anomaly_threshold = anomaly_threshold
         self.classifier = classifier
         self.class_names = class_names
         self.rul_model = rul_model
+        self.min_confidence = min_confidence
+        self.alert_engine = AlertEngine()
+        self.manifest: dict[str, Any] = {}
